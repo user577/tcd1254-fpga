@@ -1,0 +1,13 @@
+# Build artifacts
+*.json
+*.config
+*.bit
+*.svf
+
+# Simulation outputs
+testbench/*.vvp
+testbench/*.vcd
+
+# OS files
+.DS_Store
+Thumbs.db
