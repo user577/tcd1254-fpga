@@ -1,0 +1,20 @@
+[project]
+name = "tcd1254-inspector"
+version = "0.1.0"
+description = "CCD inspection system for TCD1254 FPGA readout"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.8",
+    "pyserial>=3.5",
+    "numpy>=1.24",
+    "pyqtgraph>=0.13",
+    "scipy>=1.10",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+tcd1254-inspector = "ccd_inspector.app:main"

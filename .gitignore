@@ -8,6 +8,11 @@
 testbench/*.vvp
 testbench/*.vcd
 
+# Python
+__pycache__/
+*.pyc
+host/.venv/
+
 # OS files
 .DS_Store
 Thumbs.db
