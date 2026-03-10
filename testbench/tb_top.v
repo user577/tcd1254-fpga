@@ -1,5 +1,6 @@
 // tb_top.v — Full system testbench for Colorlight i9 ECP5 target
 // Tests: PLL → CCD driver → ADC capture → frame buffer → shadow detect → UART TX
+//        + flash trigger command parsing and GPIO output
 
 `timescale 1ns / 1ps
 
@@ -10,6 +11,7 @@ module tb_top;
     wire       UART_TX;
     reg        UART_RX;
     wire       LED;
+    wire       FLASH_0, FLASH_1, FLASH_2, FLASH_3;
 
     // ADC data pins
     reg        ADC_D0, ADC_D1, ADC_D2, ADC_D3;
@@ -27,6 +29,10 @@ module tb_top;
         .ICG_PIN(ICG_PIN),
         .UART_TX(UART_TX),
         .UART_RX(UART_RX),
+        .FLASH_0(FLASH_0),
+        .FLASH_1(FLASH_1),
+        .FLASH_2(FLASH_2),
+        .FLASH_3(FLASH_3),
         .LED(LED)
     );
 
@@ -91,6 +97,7 @@ module tb_top;
         end
     endtask
 
+    // Send 'ER' exposure command (12 bytes)
     task send_command;
         input [31:0] sh;
         input [31:0] icg;
@@ -112,6 +119,24 @@ module tb_top;
         end
     endtask
 
+    // Send 'FL' flash command (8 bytes)
+    task send_flash_command;
+        input [7:0]  lamp_mask;
+        input [15:0] delay_us;
+        input [15:0] duration_us;
+        input [7:0]  flags;
+        begin
+            uart_send_byte(8'h46);      // 'F'
+            uart_send_byte(8'h4C);      // 'L'
+            uart_send_byte(lamp_mask);
+            uart_send_byte(delay_us[15:8]);
+            uart_send_byte(delay_us[7:0]);
+            uart_send_byte(duration_us[15:8]);
+            uart_send_byte(duration_us[7:0]);
+            uart_send_byte(flags);
+        end
+    endtask
+
     // Monitor UART output
     reg [7:0] rx_byte;
     integer rx_count;
@@ -123,12 +148,23 @@ module tb_top;
                 forever begin
                     uart_receive(rx_byte);
                     rx_count = rx_count + 1;
-                    $display("TIME=%0t: UART RX byte #%0d = 0x%02X",
-                             $realtime, rx_count, rx_byte);
+                    if (rx_count <= 10 || rx_count % 100 == 0)
+                        $display("TIME=%0t: UART RX byte #%0d = 0x%02X",
+                                 $realtime, rx_count, rx_byte);
                 end
             end
         join_none
     end
+
+    // Monitor flash GPIO
+    always @(posedge FLASH_0)
+        $display("TIME=%0t: FLASH_0 ON", $realtime);
+    always @(negedge FLASH_0)
+        $display("TIME=%0t: FLASH_0 OFF", $realtime);
+    always @(posedge FLASH_1)
+        $display("TIME=%0t: FLASH_1 ON", $realtime);
+    always @(negedge FLASH_1)
+        $display("TIME=%0t: FLASH_1 OFF", $realtime);
 
     // Main test
     initial begin
@@ -138,7 +174,7 @@ module tb_top;
         UART_RX   = 1'b1;
         adc_synth = 0;
 
-        $display("=== TCD1254 FPGA Top-Level Testbench (ECP5) ===");
+        $display("=== TCD1254 FPGA Top-Level Testbench (ECP5 + Flash) ===");
         $display("Waiting for PLL lock and auto-start...");
 
         #5000;
@@ -147,12 +183,28 @@ module tb_top;
         wait(dut.ccd_running == 1'b1);
         $display("TIME=%0t: CCD running", $realtime);
 
-        // Let it run for a few frames
+        // Let it run for a frame in position mode
         #10_000_000;
         $display("TIME=%0t: UART bytes received: %0d", $realtime, rx_count);
 
-        // Send raw mode command
-        $display("Sending raw mode command...");
+        // ---- Test flash command ----
+        $display("\n--- Sending flash command: lamp0, 0 delay, 200us ---");
+        send_flash_command(8'h01, 16'd0, 16'd200, 8'h02);  // lamp0, raw capture
+
+        // Wait for flash to fire on next frame_done
+        #5_000_000;
+        $display("TIME=%0t: Flash test complete", $realtime);
+
+        // ---- Test auto-sequence flash ----
+        $display("\n--- Sending auto-sequence flash: lamps 0-3 ---");
+        send_flash_command(8'h0F, 16'd0, 16'd100, 8'h03);  // auto_seq + raw
+
+        // Wait for several frames to see lamp cycling
+        #20_000_000;
+        $display("TIME=%0t: Auto-sequence test complete", $realtime);
+
+        // Send raw mode command to verify interleaved ER/FL commands work
+        $display("\n--- Sending raw mode command ---");
         send_command(32'd5000, 32'd500000, 8'd2, 8'd1);
 
         #20_000_000;
@@ -163,7 +215,7 @@ module tb_top;
     end
 
     initial begin
-        #100_000_000;
+        #200_000_000;
         $display("TIMEOUT");
         $finish;
     end

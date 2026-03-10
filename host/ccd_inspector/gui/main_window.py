@@ -8,19 +8,21 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QStatusBar,
     QTabWidget,
     QToolBar,
-    QVBoxLayout,
     QWidget,
 )
 
 from ccd_inspector.comm.protocol import BAUD_RATE
 from ccd_inspector.comm.serial_link import SerialLink
+from ccd_inspector.core.calibration import CalibrationData
+from ccd_inspector.core.config import CALIBRATION_DIR, SystemConfig
+from ccd_inspector.gui.tabs.calibration_tab import CalibrationTab
 from ccd_inspector.gui.tabs.edge_detection_tab import EdgeDetectionTab
 from ccd_inspector.gui.tabs.exposure_tab import ExposureTab
+from ccd_inspector.gui.tabs.flash_sequence_tab import FlashSequenceTab
 from ccd_inspector.gui.tabs.live_view_tab import LiveViewTab
 
 
@@ -32,8 +34,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("TCD1254 CCD Inspector")
         self.resize(1200, 700)
 
-        # Shared serial link
+        # Shared resources
         self._link = SerialLink(self)
+        self._config = SystemConfig.load()
+        self._calibration = self._load_calibration()
 
         self._build_toolbar()
         self._build_tabs()
@@ -41,6 +45,11 @@ class MainWindow(QMainWindow):
         self._connect_signals()
 
         self._refresh_ports()
+
+    def _load_calibration(self) -> CalibrationData:
+        if CALIBRATION_DIR.exists():
+            return CalibrationData.load(CALIBRATION_DIR)
+        return CalibrationData()
 
     def _build_toolbar(self):
         toolbar = QToolBar("Connection")
@@ -68,16 +77,15 @@ class MainWindow(QMainWindow):
 
         self._live_tab = LiveViewTab(self._link)
         self._exposure_tab = ExposureTab(self._link)
-
+        self._flash_tab = FlashSequenceTab(self._link)
         self._edge_tab = EdgeDetectionTab(self._link)
+        self._calib_tab = CalibrationTab(self._link, self._calibration)
 
         self._tabs.addTab(self._live_tab, "Live View")
         self._tabs.addTab(self._exposure_tab, "Exposure")
+        self._tabs.addTab(self._flash_tab, "Flash Array")
         self._tabs.addTab(self._edge_tab, "Edge Detection")
-        # Future tabs:
-        # self._tabs.addTab(FlashSequenceTab(...), "Flash Array")
-        # self._tabs.addTab(InspectionTab(...), "Inspection")
-        # self._tabs.addTab(CalibrationTab(...), "Calibration")
+        self._tabs.addTab(self._calib_tab, "Calibration")
 
     def _build_statusbar(self):
         self._statusbar = QStatusBar()
@@ -99,7 +107,6 @@ class MainWindow(QMainWindow):
             label = f"{p['device']}  ({p['description']})" if p['description'] else p['device']
             self._combo_port.addItem(label, p['device'])
 
-        # Try to auto-select
         auto = SerialLink.auto_detect_port()
         if auto:
             for i in range(self._combo_port.count()):
@@ -136,4 +143,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self._link.stop_continuous()
         self._link.disconnect()
+        # Save config
+        self._config.save()
         super().closeEvent(event)
