@@ -1,0 +1,66 @@
+; stepper.pio — PIO program for step pulse generation
+;
+; Each PIO SM drives one stepper axis STEP pin.
+; The C code feeds (delay, count) pairs into the TX FIFO.
+; The SM generates count step pulses with the given period.
+;
+; Protocol:
+;   - C pushes 32-bit word: [step_period] (in PIO cycles, determines speed)
+;   - C pushes 32-bit word: [step_count]  (number of pulses to generate)
+;   - SM generates step_count pulses, each HIGH for ~1us, LOW for (period - HIGH)
+;   - When done, SM pulls next command (blocks if FIFO empty = motor idle)
+;
+; Pin mapping:
+;   - OUT/SET pin 0 = STEP
+;   - JMP pin      = not used
+;   - sideset      = not used
+
+.program stepper
+.wrap_target
+    pull block          ; Get step period (cycles per half-period)
+    mov x, osr          ; x = half-period delay
+    pull block          ; Get step count
+    mov y, osr          ; y = remaining steps
+
+step_loop:
+    set pins, 1         ; STEP high
+    mov osr, x  [1]     ; Reload period into OSR for countdown
+high_delay:
+    jmp osr-- high_delay_end  ; Decrement delay counter (OSR as scratch)
+    jmp high_delay
+high_delay_end:
+    set pins, 0         ; STEP low
+    mov osr, x  [1]     ; Reload period for low phase
+low_delay:
+    jmp osr-- low_delay_end
+    jmp low_delay
+low_delay_end:
+    jmp y-- step_loop   ; Decrement step count, loop if more
+.wrap                   ; Done — pull next command
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void stepper_pio_program_init(PIO pio, uint sm, uint offset,
+                                             uint step_pin) {
+    pio_sm_config c = stepper_program_get_default_config(offset);
+
+    // Map SET pin to the STEP output
+    sm_config_set_set_pins(&c, step_pin, 1);
+
+    // Initialize pin as output, low
+    pio_gpio_init(pio, step_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, step_pin, 1, true);
+
+    // Run at 1 MHz for easy timing (1 us per cycle)
+    // Actual step rate determined by delay counts in the program
+    float div = (float)clock_get_hz(clk_sys) / 1000000.0f;
+    sm_config_set_clkdiv(&c, div);
+
+    // Configure FIFO: TX only (we never read from PIO)
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

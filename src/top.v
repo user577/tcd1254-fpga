@@ -36,6 +36,12 @@ module top (
     output wire       FLASH_2,      // J3_G1 — Flash lamp 2 (side)
     output wire       FLASH_3,      // J3_B1 — Flash lamp 3 (back)
 
+    // J4 connector: SPI to RP2040
+    input  wire       SPI_SCK,      // J4_R0 — SPI clock from RP2040
+    input  wire       SPI_MOSI,     // J4_G0 — RP2040 → FPGA
+    output wire       SPI_MISO,     // J4_B0 — FPGA → RP2040
+    input  wire       SPI_CS_N,     // J4_R1 — Active-low chip select
+
     // Onboard LED (active-low, shared with ADC_D9 pin — directly drive unused)
     output wire       LED
 );
@@ -84,6 +90,10 @@ module top (
     reg [7:0]   current_mode;
     reg [3:0]   auto_start_cnt;
     reg         auto_start;
+    wire        spi_restart;
+    wire        spi_cmd_trigger;
+    wire        spi_fb_streaming;
+    wire [11:0] spi_fb_addr;
 
     // ========== CCD Driver ==========
     wire        fm_out, sh_out, icg_out;
@@ -109,8 +119,8 @@ module top (
     ) ccd_inst (
         .clk(clk),
         .rst(rst),
-        .start(cmd_restart | auto_start),
-        .stop(cmd_valid_pulse),
+        .start(cmd_restart | auto_start | spi_restart),
+        .stop(cmd_valid_pulse | spi_cmd_trigger),
         .sh_period(sh_period_w),
         .icg_period(icg_period_w),
         .fm_out(fm_out),
@@ -170,7 +180,10 @@ module top (
     wire [11:0] tx_rd_addr;
     wire        shadow_active;
 
-    assign fb_rd_addr = shadow_active ? shadow_rd_addr : tx_rd_addr;
+    // Priority: SPI streaming > shadow detect > frame TX
+    assign fb_rd_addr = spi_fb_streaming ? spi_fb_addr
+                      : shadow_active    ? shadow_rd_addr
+                      :                    tx_rd_addr;
 
     // Delay swap by 1 cycle so the final pixel write (through adc_capture's
     // pipeline register) completes before the buffer flips.
@@ -301,6 +314,11 @@ module top (
             current_mode <= 8'd1;
             current_sh   <= 32'd20;
             current_icg  <= 32'd500000;
+        end else if (spi_cmd_write_expo) begin
+            // SPI takes priority (RP2040 is primary controller)
+            current_sh   <= spi_expo_config[79:48];
+            current_icg  <= spi_expo_config[47:16];
+            current_mode <= spi_expo_config[15:8];
         end else if (cmd_valid_pulse) begin
             current_mode <= cmd_mode;
             current_sh   <= cmd_sh_period;
@@ -349,6 +367,12 @@ module top (
             current_flash_duration <= 16'd500;
             current_flash_auto_seq <= 1'b0;
             current_flash_enabled  <= 1'b0;
+        end else if (spi_cmd_write_flash) begin
+            // SPI takes priority (RP2040 is primary controller)
+            current_flash_mask     <= spi_flash_config[47:40];
+            current_flash_delay    <= spi_flash_config[39:24];
+            current_flash_duration <= spi_flash_config[23:8];
+            current_flash_enabled  <= spi_flash_config[0];
         end else if (cmd_flash_cmd_valid) begin
             current_flash_mask     <= cmd_flash_lamp_mask;
             current_flash_delay    <= cmd_flash_delay_us;
@@ -377,6 +401,82 @@ module top (
     assign FLASH_1 = flash_gpio[1];
     assign FLASH_2 = flash_gpio[2];
     assign FLASH_3 = flash_gpio[3];
+
+    // ========== SPI Peripheral (RP2040 interface) ==========
+    wire [7:0]  spi_reg_addr;
+    wire [7:0]  spi_reg_wdata;
+    wire        spi_reg_wr;
+    wire [7:0]  spi_reg_rdata;
+    wire        spi_cmd_write_expo;
+    wire        spi_cmd_write_flash;
+    // spi_cmd_trigger forward-declared above
+    wire [79:0] spi_expo_config;
+    wire [47:0] spi_flash_config;
+    // spi_fb_addr and spi_fb_streaming forward-declared above
+    wire [11:0] spi_fb_data;
+
+    // Shadow valid flag (latched until next capture)
+    reg shadow_valid_reg;
+    always @(posedge clk) begin
+        if (rst)
+            shadow_valid_reg <= 1'b0;
+        else if (shadow_done)
+            shadow_valid_reg <= 1'b1;
+        else if (spi_cmd_trigger)
+            shadow_valid_reg <= 1'b0;
+    end
+
+    // Frame ready flag (latched until next trigger)
+    reg frame_ready_reg;
+    always @(posedge clk) begin
+        if (rst)
+            frame_ready_reg <= 1'b0;
+        else if (frame_done_d)
+            frame_ready_reg <= 1'b1;
+        else if (spi_cmd_trigger)
+            frame_ready_reg <= 1'b0;
+    end
+
+    // Register read data (directly from frame buffer for now)
+    assign spi_reg_rdata = 8'd0;  // General register reads not yet mapped
+    assign spi_fb_data   = fb_rd_data;
+
+    spi_peripheral spi_inst (
+        .clk(clk),
+        .rst(rst),
+        .spi_sck(SPI_SCK),
+        .spi_mosi(SPI_MOSI),
+        .spi_miso(SPI_MISO),
+        .spi_cs_n(SPI_CS_N),
+        .reg_addr(spi_reg_addr),
+        .reg_wdata(spi_reg_wdata),
+        .reg_wr(spi_reg_wr),
+        .reg_rdata(spi_reg_rdata),
+        .cmd_write_expo(spi_cmd_write_expo),
+        .cmd_write_flash(spi_cmd_write_flash),
+        .cmd_trigger(spi_cmd_trigger),
+        .expo_config(spi_expo_config),
+        .flash_config(spi_flash_config),
+        .fb_stream_addr(spi_fb_addr),
+        .fb_stream_data(spi_fb_data),
+        .fb_streaming(spi_fb_streaming),
+        .ccd_running(ccd_running),
+        .frame_ready(frame_ready_reg),
+        .shadow_result(shadow_result),
+        .shadow_valid(shadow_valid_reg)
+    );
+
+    // SPI trigger → restart CCD
+    // (cmd_restart already handles UART triggers; OR in SPI trigger)
+    // spi_restart forward-declared above
+    reg  spi_trigger_d;
+    always @(posedge clk) begin
+        if (rst)
+            spi_trigger_d <= 1'b0;
+        else
+            spi_trigger_d <= spi_cmd_trigger;
+    end
+    assign spi_restart = spi_trigger_d;
 
     // ========== Auto-start on power-up ==========
     always @(posedge clk) begin

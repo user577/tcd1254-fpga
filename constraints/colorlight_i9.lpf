@@ -67,6 +67,19 @@ IOBUF  PORT "FLASH_1" IO_TYPE=LVCMOS33 DRIVE=8;
 IOBUF  PORT "FLASH_2" IO_TYPE=LVCMOS33 DRIVE=8;
 IOBUF  PORT "FLASH_3" IO_TYPE=LVCMOS33 DRIVE=8;
 
+## ---- SPI to RP2040 — J4 connector ----
+## RP2040 is SPI master, FPGA is peripheral.
+## VERIFY pin assignments against your J4 breakout wiring!
+LOCATE COMP "SPI_SCK"  SITE "F1";   # J4_R0
+LOCATE COMP "SPI_MOSI" SITE "G2";   # J4_G0  (RP2040 → FPGA)
+LOCATE COMP "SPI_MISO" SITE "H1";   # J4_B0  (FPGA → RP2040)
+LOCATE COMP "SPI_CS_N" SITE "G1";   # J4_R1  (active-low chip select)
+
+IOBUF  PORT "SPI_SCK"  IO_TYPE=LVCMOS33;
+IOBUF  PORT "SPI_MOSI" IO_TYPE=LVCMOS33;
+IOBUF  PORT "SPI_MISO" IO_TYPE=LVCMOS33;
+IOBUF  PORT "SPI_CS_N" IO_TYPE=LVCMOS33 PULLMODE=UP;
+
 ## ---- Onboard LED ----
 ## LED D2 is on L2 (shared with SODIMM pin 41).
 ## Not used in this design (ADC uses all available connector groups).

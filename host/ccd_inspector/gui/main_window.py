@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from ccd_inspector.comm.protocol import BAUD_RATE
+from ccd_inspector.comm.rp2040_link import RP2040Link
 from ccd_inspector.comm.serial_link import SerialLink
 from ccd_inspector.core.calibration import CalibrationData
 from ccd_inspector.core.config import CALIBRATION_DIR, SystemConfig
@@ -24,6 +25,7 @@ from ccd_inspector.gui.tabs.edge_detection_tab import EdgeDetectionTab
 from ccd_inspector.gui.tabs.exposure_tab import ExposureTab
 from ccd_inspector.gui.tabs.flash_sequence_tab import FlashSequenceTab
 from ccd_inspector.gui.tabs.live_view_tab import LiveViewTab
+from ccd_inspector.gui.tabs.system_control_tab import SystemControlTab
 
 
 class MainWindow(QMainWindow):
@@ -36,6 +38,7 @@ class MainWindow(QMainWindow):
 
         # Shared resources
         self._link = SerialLink(self)
+        self._rp2040 = RP2040Link()
         self._config = SystemConfig.load()
         self._calibration = self._load_calibration()
 
@@ -80,12 +83,14 @@ class MainWindow(QMainWindow):
         self._flash_tab = FlashSequenceTab(self._link)
         self._edge_tab = EdgeDetectionTab(self._link)
         self._calib_tab = CalibrationTab(self._link, self._calibration)
+        self._system_tab = SystemControlTab(self._rp2040)
 
         self._tabs.addTab(self._live_tab, "Live View")
         self._tabs.addTab(self._exposure_tab, "Exposure")
         self._tabs.addTab(self._flash_tab, "Flash Array")
         self._tabs.addTab(self._edge_tab, "Edge Detection")
         self._tabs.addTab(self._calib_tab, "Calibration")
+        self._tabs.addTab(self._system_tab, "System Control")
 
     def _build_statusbar(self):
         self._statusbar = QStatusBar()
@@ -143,6 +148,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self._link.stop_continuous()
         self._link.disconnect()
+        self._rp2040.disconnect()
         # Save config
         self._config.save()
         super().closeEvent(event)

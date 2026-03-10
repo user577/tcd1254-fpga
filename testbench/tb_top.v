@@ -12,6 +12,11 @@ module tb_top;
     reg        UART_RX;
     wire       LED;
     wire       FLASH_0, FLASH_1, FLASH_2, FLASH_3;
+    // SPI to RP2040
+    reg        SPI_SCK  = 0;
+    reg        SPI_MOSI = 0;
+    wire       SPI_MISO;
+    reg        SPI_CS_N = 1;
 
     // ADC data pins
     reg        ADC_D0, ADC_D1, ADC_D2, ADC_D3;
@@ -33,6 +38,10 @@ module tb_top;
         .FLASH_1(FLASH_1),
         .FLASH_2(FLASH_2),
         .FLASH_3(FLASH_3),
+        .SPI_SCK(SPI_SCK),
+        .SPI_MOSI(SPI_MOSI),
+        .SPI_MISO(SPI_MISO),
+        .SPI_CS_N(SPI_CS_N),
         .LED(LED)
     );
 
@@ -156,6 +165,41 @@ module tb_top;
         join_none
     end
 
+    // ---- SPI master tasks (simulating RP2040) ----
+    localparam SPI_HALF = 50;  // 10 MHz SPI clock
+
+    task spi_xfer;
+        input  [7:0] tx;
+        output [7:0] rx;
+        integer i;
+        begin
+            rx = 8'h00;
+            for (i = 7; i >= 0; i = i - 1) begin
+                SPI_MOSI = tx[i];
+                #SPI_HALF;
+                SPI_SCK = 1;
+                rx[i] = SPI_MISO;
+                #SPI_HALF;
+                SPI_SCK = 0;
+            end
+        end
+    endtask
+
+    task spi_send_byte;
+        input [7:0] tx;
+        reg [7:0] dummy;
+        begin
+            spi_xfer(tx, dummy);
+        end
+    endtask
+
+    task spi_read_byte;
+        output [7:0] rx;
+        begin
+            spi_xfer(8'h00, rx);
+        end
+    endtask
+
     // Monitor flash GPIO
     always @(posedge FLASH_0)
         $display("TIME=%0t: FLASH_0 ON", $realtime);
@@ -210,6 +254,50 @@ module tb_top;
         #20_000_000;
         $display("TIME=%0t: Total UART bytes: %0d", $realtime, rx_count);
 
+        // ---- Test SPI interface (simulating RP2040) ----
+        $display("\n--- SPI: Reading status ---");
+        SPI_CS_N = 0;
+        #100;
+        spi_send_byte(8'hFE);        // Status command
+        begin : spi_status_block
+            reg [7:0] spi_rx;
+            spi_read_byte(spi_rx);
+            $display("  SPI status: 0x%02X", spi_rx);
+        end
+        SPI_CS_N = 1;
+        #500;
+
+        $display("\n--- SPI: Reading shadow ---");
+        SPI_CS_N = 0;
+        #100;
+        spi_send_byte(8'h03);        // Read shadow command
+        begin : spi_shadow_block
+            reg [7:0] hi, lo;
+            spi_read_byte(hi);
+            spi_read_byte(lo);
+            $display("  SPI shadow: 0x%02X%02X", hi, lo);
+        end
+        SPI_CS_N = 1;
+        #500;
+
+        $display("\n--- SPI: Setting exposure via SPI ---");
+        SPI_CS_N = 0;
+        #100;
+        spi_send_byte(8'h10);        // Write expo command
+        // SH = 10 (0x0000000A)
+        spi_send_byte(8'h00); spi_send_byte(8'h00);
+        spi_send_byte(8'h00); spi_send_byte(8'h0A);
+        // ICG = 250000 (0x0003D090)
+        spi_send_byte(8'h00); spi_send_byte(8'h03);
+        spi_send_byte(8'hD0); spi_send_byte(8'h90);
+        // mode=1, avg=2
+        spi_send_byte(8'h01); spi_send_byte(8'h02);
+        SPI_CS_N = 1;
+        #1000;
+
+        $display("  SPI expo config applied (SH=10, ICG=250000)");
+
+        #5_000_000;
         $display("=== Testbench Complete ===");
         $finish;
     end

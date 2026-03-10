@@ -57,6 +57,11 @@ sim_flash:
 		src/flash_trigger.v testbench/tb_flash_trigger.v
 	cd testbench && vvp tb_flash_trigger.vvp
 
+sim_spi:
+	iverilog -o testbench/tb_spi_peripheral.vvp -I src \
+		src/spi_peripheral.v testbench/tb_spi_peripheral.v
+	cd testbench && vvp tb_spi_peripheral.vvp
+
 clean:
 	rm -f $(PROJ).json $(PROJ).config $(PROJ).bit
 	rm -f testbench/*.vvp testbench/*.vcd

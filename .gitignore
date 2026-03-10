@@ -1,4 +1,4 @@
-# Build artifacts
+# FPGA build artifacts
 *.json
 *.config
 *.bit
@@ -8,11 +8,28 @@
 testbench/*.vvp
 testbench/*.vcd
 
+# RP2040 firmware build
+firmware/build/
+*.uf2
+*.elf
+*.bin
+*.hex
+*.map
+*.dis
+
 # Python
 __pycache__/
 *.pyc
 host/.venv/
+*.egg-info/
 
 # OS files
 .DS_Store
 Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
