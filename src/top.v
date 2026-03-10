@@ -28,9 +28,13 @@ module top (
     output wire       SH_PIN,       // J2_A  — SH to 74HCT04 → CCD
     output wire       ICG_PIN,      // J2_B_CTRL — ICG to 74HCT04 → CCD
 
-    // J3 connector: UART
+    // J3 connector: UART + Flash lamp GPIO
     output wire       UART_TX,      // J3_R0 — FPGA → host
     input  wire       UART_RX,      // J3_G0 — host → FPGA
+    output wire       FLASH_0,      // J3_B0 — Flash lamp 0 (top)
+    output wire       FLASH_1,      // J3_R1 — Flash lamp 1 (angled)
+    output wire       FLASH_2,      // J3_G1 — Flash lamp 2 (side)
+    output wire       FLASH_3,      // J3_B1 — Flash lamp 3 (back)
 
     // Onboard LED (active-low, shared with ADC_D9 pin — directly drive unused)
     output wire       LED
@@ -261,6 +265,15 @@ module top (
     wire [7:0]  cmd_mode;
     wire [7:0]  cmd_avg;
 
+    // Flash command wires
+    wire [7:0]  cmd_flash_lamp_mask;
+    wire [15:0] cmd_flash_delay_us;
+    wire [15:0] cmd_flash_duration_us;
+    wire        cmd_flash_auto_seq;
+    wire        cmd_flash_raw_capture;
+    wire        cmd_flash_enabled;
+    wire        cmd_flash_cmd_valid;
+
     cmd_parser cmd_inst (
         .clk(clk),
         .rst(rst),
@@ -270,7 +283,14 @@ module top (
         .icg_period(cmd_icg_period),
         .mode(cmd_mode),
         .avg_count(cmd_avg),
-        .cmd_valid(cmd_valid_pulse)
+        .cmd_valid(cmd_valid_pulse),
+        .flash_lamp_mask(cmd_flash_lamp_mask),
+        .flash_delay_us(cmd_flash_delay_us),
+        .flash_duration_us(cmd_flash_duration_us),
+        .flash_auto_seq(cmd_flash_auto_seq),
+        .flash_raw_capture(cmd_flash_raw_capture),
+        .flash_enabled(cmd_flash_enabled),
+        .flash_cmd_valid(cmd_flash_cmd_valid)
     );
 
     // Latch current mode/settings
@@ -310,6 +330,53 @@ module top (
         .tx_busy(uart_tx_busy),
         .transmitting(ftx_transmitting)
     );
+
+    // ========== Flash Trigger ==========
+    wire [7:0] flash_gpio;
+    wire [2:0] flash_current_lamp;
+
+    // Latch flash settings (persist until next FL command)
+    reg [7:0]  current_flash_mask;
+    reg [15:0] current_flash_delay;
+    reg [15:0] current_flash_duration;
+    reg        current_flash_auto_seq;
+    reg        current_flash_enabled;
+
+    always @(posedge clk) begin
+        if (rst) begin
+            current_flash_mask     <= 8'd0;
+            current_flash_delay    <= 16'd0;
+            current_flash_duration <= 16'd500;
+            current_flash_auto_seq <= 1'b0;
+            current_flash_enabled  <= 1'b0;
+        end else if (cmd_flash_cmd_valid) begin
+            current_flash_mask     <= cmd_flash_lamp_mask;
+            current_flash_delay    <= cmd_flash_delay_us;
+            current_flash_duration <= cmd_flash_duration_us;
+            current_flash_auto_seq <= cmd_flash_auto_seq;
+            current_flash_enabled  <= cmd_flash_enabled;
+        end
+    end
+
+    flash_trigger #(
+        .SYS_CLK_FREQ(SYS_CLK_FREQ)
+    ) flash_inst (
+        .clk(clk),
+        .rst(rst),
+        .lamp_mask(current_flash_mask),
+        .flash_delay_us(current_flash_delay),
+        .flash_duration_us(current_flash_duration),
+        .auto_sequence(current_flash_auto_seq),
+        .flash_enabled(current_flash_enabled),
+        .frame_done(frame_done),
+        .flash_out(flash_gpio),
+        .current_lamp_id(flash_current_lamp)
+    );
+
+    assign FLASH_0 = flash_gpio[0];
+    assign FLASH_1 = flash_gpio[1];
+    assign FLASH_2 = flash_gpio[2];
+    assign FLASH_3 = flash_gpio[3];
 
     // ========== Auto-start on power-up ==========
     always @(posedge clk) begin

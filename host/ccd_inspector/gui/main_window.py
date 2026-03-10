@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from ccd_inspector.comm.protocol import BAUD_RATE
 from ccd_inspector.comm.serial_link import SerialLink
+from ccd_inspector.gui.tabs.edge_detection_tab import EdgeDetectionTab
 from ccd_inspector.gui.tabs.exposure_tab import ExposureTab
 from ccd_inspector.gui.tabs.live_view_tab import LiveViewTab
 
@@ -68,11 +69,13 @@ class MainWindow(QMainWindow):
         self._live_tab = LiveViewTab(self._link)
         self._exposure_tab = ExposureTab(self._link)
 
+        self._edge_tab = EdgeDetectionTab(self._link)
+
         self._tabs.addTab(self._live_tab, "Live View")
         self._tabs.addTab(self._exposure_tab, "Exposure")
-        # Future tabs added here:
+        self._tabs.addTab(self._edge_tab, "Edge Detection")
+        # Future tabs:
         # self._tabs.addTab(FlashSequenceTab(...), "Flash Array")
-        # self._tabs.addTab(EdgeDetectionTab(...), "Edge Detection")
         # self._tabs.addTab(InspectionTab(...), "Inspection")
         # self._tabs.addTab(CalibrationTab(...), "Calibration")
 

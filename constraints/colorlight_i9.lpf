@@ -54,6 +54,19 @@ LOCATE COMP "UART_RX" SITE "E2";   # SODIMM 151 — host → FPGA
 IOBUF  PORT "UART_TX" IO_TYPE=LVCMOS33;
 IOBUF  PORT "UART_RX" IO_TYPE=LVCMOS33 PULLMODE=UP;
 
+## ---- Flash Lamp GPIO — J3 spare pins ----
+## Active-high outputs to MOSFET drivers for xenon/LED flash lamps.
+## VERIFY pin assignments against your J3 breakout wiring!
+LOCATE COMP "FLASH_0" SITE "C1";   # J3_B0  — Flash 0 (top, 0 deg)
+LOCATE COMP "FLASH_1" SITE "B1";   # J3_R1  — Flash 1 (angled, 45 deg)
+LOCATE COMP "FLASH_2" SITE "D3";   # J3_G1  — Flash 2 (side, 90 deg)
+LOCATE COMP "FLASH_3" SITE "C2";   # J3_B1  — Flash 3 (back, 135 deg)
+
+IOBUF  PORT "FLASH_0" IO_TYPE=LVCMOS33 DRIVE=8;
+IOBUF  PORT "FLASH_1" IO_TYPE=LVCMOS33 DRIVE=8;
+IOBUF  PORT "FLASH_2" IO_TYPE=LVCMOS33 DRIVE=8;
+IOBUF  PORT "FLASH_3" IO_TYPE=LVCMOS33 DRIVE=8;
+
 ## ---- Onboard LED ----
 ## LED D2 is on L2 (shared with SODIMM pin 41).
 ## Not used in this design (ADC uses all available connector groups).

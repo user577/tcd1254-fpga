@@ -52,6 +52,11 @@ sim_shadow:
 		src/shadow_detect.v testbench/tb_shadow_detect.v
 	cd testbench && vvp tb_shadow_detect.vvp
 
+sim_flash:
+	iverilog -o testbench/tb_flash_trigger.vvp -I src \
+		src/flash_trigger.v testbench/tb_flash_trigger.v
+	cd testbench && vvp tb_flash_trigger.vvp
+
 clean:
 	rm -f $(PROJ).json $(PROJ).config $(PROJ).bit
 	rm -f testbench/*.vvp testbench/*.vcd
