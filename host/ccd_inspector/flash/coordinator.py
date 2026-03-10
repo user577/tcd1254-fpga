@@ -20,7 +20,7 @@ from ccd_inspector.comm.protocol import (
     build_flash_command,
     lamp_ids_to_mask,
 )
-from ccd_inspector.comm.serial_link import SerialLink
+from ccd_inspector.comm.ccd_link import CcdLink
 from ccd_inspector.core.frame import CCDFrame
 from ccd_inspector.flash.lamp_config import LampArrayConfig
 from ccd_inspector.flash.sequence import FlashSequence
@@ -38,9 +38,9 @@ class FlashCaptureCoordinator(QObject):
     # Progress: (current_step, total_steps)
     progress = Signal(int, int)
 
-    def __init__(self, serial_link: SerialLink, parent=None):
+    def __init__(self, link: CcdLink, parent=None):
         super().__init__(parent)
-        self._link = serial_link
+        self._link = link
         self._config: LampArrayConfig | None = None
         self._active_sequence: FlashSequence | None = None
         self._collected_frames: dict[int, CCDFrame] = {}

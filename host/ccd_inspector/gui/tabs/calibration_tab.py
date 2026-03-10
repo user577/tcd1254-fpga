@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from ccd_inspector.comm.protocol import MODE_RAW
-from ccd_inspector.comm.serial_link import SerialLink
+from ccd_inspector.comm.ccd_link import CcdLink
 from ccd_inspector.core.calibration import CalibrationData
 from ccd_inspector.core.config import CALIBRATION_DIR
 from ccd_inspector.gui.widgets.waveform_widget import WaveformWidget
@@ -38,12 +38,12 @@ class CalibrationTab(QWidget):
 
     def __init__(
         self,
-        serial_link: SerialLink,
+        link: CcdLink,
         calibration: CalibrationData,
         parent=None,
     ):
         super().__init__(parent)
-        self._link = serial_link
+        self._link = link
         self._calibration = calibration
         self._capture_buffer: list[np.ndarray] = []
         self._capture_target = 0

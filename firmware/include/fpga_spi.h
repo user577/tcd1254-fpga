@@ -49,4 +49,8 @@ void     fpga_trigger_capture(void);
 // Read raw frame (2200 x 12-bit pixels into caller's buffer)
 void     fpga_read_frame(uint16_t *pixels, uint16_t count);
 
+// SPI bus mutex — serializes access from both cores
+void     fpga_spi_lock(void);
+void     fpga_spi_unlock(void);
+
 #endif // FPGA_SPI_H

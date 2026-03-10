@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Callable
-
 import numpy as np
 import serial
 import serial.tools.list_ports
 from PySide6.QtCore import QObject, QThread, Signal
 
+from ccd_inspector.comm.ccd_link import CcdLink
 from ccd_inspector.comm.protocol import (
     BAUD_RATE,
     MODE_POSITION,
@@ -101,13 +100,8 @@ class _ReaderWorker(QObject):
         self._running = False
 
 
-class SerialLink(QObject):
-    """Thread-safe serial port manager."""
-
-    frame_received = Signal(np.ndarray, float)  # pixels, timestamp
-    position_received = Signal(object)  # float | None
-    connection_changed = Signal(bool)
-    error_occurred = Signal(str)
+class SerialLink(CcdLink):
+    """Thread-safe serial port manager for direct FPGA UART connection."""
 
     def __init__(self, parent=None):
         super().__init__(parent)

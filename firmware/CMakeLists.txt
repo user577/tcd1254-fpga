@@ -27,6 +27,7 @@ target_include_directories(tcd1254_controller PRIVATE
 
 target_link_libraries(tcd1254_controller
     pico_stdlib
+    pico_sync
     hardware_spi
     hardware_pio
     hardware_gpio

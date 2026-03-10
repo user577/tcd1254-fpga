@@ -16,6 +16,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "pico/stdlib.h"
+#include "pico/stdio_usb.h"
 #include "pico/multicore.h"
 #include "hardware/gpio.h"
 #include "hardware/watchdog.h"
@@ -28,6 +29,10 @@
 
 // ---- System config (shared, core0 writes / core1 reads) ----
 static system_config_t sys_config;
+
+// ---- Frame download / streaming ----
+static uint16_t frame_buf[2200];
+static bool streaming = false;
 
 // ---- USB serial command protocol ----
 //
@@ -54,6 +59,9 @@ static system_config_t sys_config;
 //   FLASH m d dur f   → set FPGA flash config
 //   TRIGGER           → trigger single capture
 //   SHADOW            → read shadow result
+//   FRAME             → capture + binary frame download (4400 bytes)
+//   STREAM_START      → start continuous frame streaming
+//   STREAM_STOP       → stop continuous frame streaming
 //   STATS             → get sort statistics
 //   STATS_RESET       → reset sort statistics
 
@@ -435,6 +443,44 @@ static void process_command(char *line) {
         float px = fpga_read_shadow_px();
         printf("{\"shadow_px\":%.1f}\n", (double)px);
 
+    } else if (strncmp(p, "FRAME", 5) == 0) {
+        // Single frame capture + binary download
+        fpga_trigger_capture();
+
+        // Poll for frame ready with 500ms timeout
+        absolute_time_t deadline = make_timeout_time_ms(500);
+        bool ready = false;
+        while (!time_reached(deadline)) {
+            if (fpga_frame_ready()) {
+                ready = true;
+                break;
+            }
+            sleep_us(100);
+        }
+
+        if (!ready) {
+            printf("ERR frame timeout\n");
+        } else {
+            fpga_read_frame(frame_buf, 2200);
+
+            // Flush any pending text output before binary transfer
+            fflush(stdout);
+
+            // Send 4-byte header: sync (0xAA 0x55) + length 4400 big-endian (0x11 0x30)
+            uint8_t header[4] = {0xAA, 0x55, 0x11, 0x30};
+            fwrite(header, 1, 4, stdout);
+            fwrite(frame_buf, 1, 4400, stdout);
+            fflush(stdout);
+        }
+
+    } else if (strncmp(p, "STREAM_START", 12) == 0) {
+        streaming = true;
+        printf("OK streaming\n");
+
+    } else if (strncmp(p, "STREAM_STOP", 11) == 0) {
+        streaming = false;
+        printf("OK stopped\n");
+
     } else if (strncmp(p, "STATS_RESET", 11) == 0) {
         sort_seq_reset_stats();
         printf("OK stats reset\n");
@@ -531,6 +577,20 @@ int main(void) {
         }
 
         led_update();
+
+        // Continuous streaming mode
+        if (streaming) {
+            bool ready = fpga_frame_ready();
+            if (ready) {
+                fpga_read_frame(frame_buf, 2200);
+
+                fflush(stdout);
+                uint8_t hdr[4] = {0xAA, 0x55, 0x11, 0x30};
+                fwrite(hdr, 1, 4, stdout);
+                fwrite(frame_buf, 1, 4400, stdout);
+                fflush(stdout);
+            }
+        }
     }
 
     return 0;

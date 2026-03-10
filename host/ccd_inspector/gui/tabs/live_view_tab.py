@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ccd_inspector.comm.protocol import MODE_RAW
-from ccd_inspector.comm.serial_link import SerialLink
+from ccd_inspector.comm.ccd_link import CcdLink
 from ccd_inspector.core.frame import CCDFrame
 from ccd_inspector.gui.widgets.histogram_widget import HistogramWidget
 from ccd_inspector.gui.widgets.waveform_widget import WaveformWidget
@@ -26,9 +26,9 @@ from ccd_inspector.gui.widgets.waveform_widget import WaveformWidget
 class LiveViewTab(QWidget):
     """Real-time CCD waveform and histogram display."""
 
-    def __init__(self, serial_link: SerialLink, parent=None):
+    def __init__(self, link: CcdLink, parent=None):
         super().__init__(parent)
-        self._link = serial_link
+        self._link = link
         self._frame_count = 0
         self._fps_time = time.perf_counter()
         self._fps = 0.0

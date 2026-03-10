@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ccd_inspector.comm.protocol import MODE_RAW
-from ccd_inspector.comm.serial_link import SerialLink
+from ccd_inspector.comm.ccd_link import CcdLink
 from ccd_inspector.core.timing import (
     MIN_ICG,
     MIN_SH,
@@ -54,9 +54,9 @@ def _ms_to_slider(ms: float) -> int:
 class ExposureTab(QWidget):
     """Interactive SH/ICG control with live waveform preview."""
 
-    def __init__(self, serial_link: SerialLink, parent=None):
+    def __init__(self, link: CcdLink, parent=None):
         super().__init__(parent)
-        self._link = serial_link
+        self._link = link
         self._updating = False  # guard against signal loops
 
         self._build_ui()

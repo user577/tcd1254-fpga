@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ccd_inspector.comm.serial_link import SerialLink
+from ccd_inspector.comm.ccd_link import CcdLink
 from ccd_inspector.flash.coordinator import FlashCaptureCoordinator
 from ccd_inspector.flash.lamp_config import LampArrayConfig, LampConfig
 from ccd_inspector.flash.sequence import FlashSequence
@@ -31,11 +31,11 @@ from ccd_inspector.gui.widgets.waveform_widget import WaveformWidget
 class FlashSequenceTab(QWidget):
     """Configure flash lamp array and run capture sequences."""
 
-    def __init__(self, serial_link: SerialLink, parent=None):
+    def __init__(self, link: CcdLink, parent=None):
         super().__init__(parent)
-        self._link = serial_link
+        self._link = link
         self._config = LampArrayConfig.default_4_angle()
-        self._coordinator = FlashCaptureCoordinator(serial_link)
+        self._coordinator = FlashCaptureCoordinator(link)
         self._coordinator.set_lamp_config(self._config)
 
         self._build_ui()

@@ -4,16 +4,26 @@
 #include "pins.h"
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
+#include "pico/mutex.h"
 #include <string.h>
+
+// ---- SPI bus mutex (serializes access from both cores) ----
+
+static mutex_t spi_mtx;
+
+void fpga_spi_lock(void)   { mutex_enter_blocking(&spi_mtx); }
+void fpga_spi_unlock(void) { mutex_exit(&spi_mtx); }
 
 // ---- SPI helpers ----
 
 static inline void cs_select(void) {
+    mutex_enter_blocking(&spi_mtx);
     gpio_put(PIN_SPI_CS, 0);
 }
 
 static inline void cs_deselect(void) {
     gpio_put(PIN_SPI_CS, 1);
+    mutex_exit(&spi_mtx);
 }
 
 static void spi_write_byte(uint8_t b) {
@@ -29,6 +39,9 @@ static uint8_t spi_read_byte(void) {
 // ---- Init ----
 
 void fpga_spi_init(void) {
+    // Init SPI bus mutex (must be called before multicore_launch_core1)
+    mutex_init(&spi_mtx);
+
     // Init SPI0 at 10 MHz, Mode 0 (CPOL=0, CPHA=0)
     spi_init(FPGA_SPI_INST, 10 * 1000 * 1000);
     spi_set_format(FPGA_SPI_INST, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);

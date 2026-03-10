@@ -15,9 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ccd_inspector.comm.protocol import BAUD_RATE
 from ccd_inspector.comm.rp2040_link import RP2040Link
-from ccd_inspector.comm.serial_link import SerialLink
 from ccd_inspector.core.calibration import CalibrationData
 from ccd_inspector.core.config import CALIBRATION_DIR, SystemConfig
 from ccd_inspector.gui.tabs.calibration_tab import CalibrationTab
@@ -36,9 +34,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("TCD1254 CCD Inspector")
         self.resize(1200, 700)
 
-        # Shared resources
-        self._link = SerialLink(self)
-        self._rp2040 = RP2040Link()
+        # Communication links
+        self._rp2040_link = RP2040Link(self)
+        self._link = self._rp2040_link  # Primary CCD link for all tabs
+
         self._config = SystemConfig.load()
         self._calibration = self._load_calibration()
 
@@ -83,7 +82,7 @@ class MainWindow(QMainWindow):
         self._flash_tab = FlashSequenceTab(self._link)
         self._edge_tab = EdgeDetectionTab(self._link)
         self._calib_tab = CalibrationTab(self._link, self._calibration)
-        self._system_tab = SystemControlTab(self._rp2040)
+        self._system_tab = SystemControlTab(self._rp2040_link)
 
         self._tabs.addTab(self._live_tab, "Live View")
         self._tabs.addTab(self._exposure_tab, "Exposure")
@@ -107,12 +106,12 @@ class MainWindow(QMainWindow):
 
     def _refresh_ports(self):
         self._combo_port.clear()
-        ports = SerialLink.list_ports()
+        ports = RP2040Link.list_ports()
         for p in ports:
             label = f"{p['device']}  ({p['description']})" if p['description'] else p['device']
             self._combo_port.addItem(label, p['device'])
 
-        auto = SerialLink.auto_detect_port()
+        auto = RP2040Link.auto_detect_port()
         if auto:
             for i in range(self._combo_port.count()):
                 if self._combo_port.itemData(i) == auto:
@@ -124,7 +123,7 @@ class MainWindow(QMainWindow):
         if not port:
             self._statusbar.showMessage("No port selected", 3000)
             return
-        ok = self._link.connect(port, BAUD_RATE)
+        ok = self._rp2040_link.connect(port)
         if not ok:
             self._statusbar.showMessage(f"Failed to connect to {port}", 3000)
 
@@ -148,7 +147,5 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self._link.stop_continuous()
         self._link.disconnect()
-        self._rp2040.disconnect()
-        # Save config
         self._config.save()
         super().closeEvent(event)

@@ -26,37 +26,28 @@ AXIS_NAMES = ["Feeder", "Conveyor", "Singulate", "Sort"]
 
 
 class SystemControlTab(QWidget):
-    """RP2040 system controller interface."""
+    """RP2040 system controller interface.
+
+    Connection is managed by MainWindow — this tab uses the shared
+    RP2040Link and polls status while visible and connected.
+    """
 
     def __init__(self, rp2040: RP2040Link, parent=None):
         super().__init__(parent)
         self._rp = rp2040
         self._build_ui()
-        self._connect_signals()
 
-        # Poll status every 500 ms when connected
+        # Poll status every 500 ms when visible and connected
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll_status)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
 
-        # Connection
-        conn_box = QGroupBox("RP2040 Connection")
-        conn_lay = QHBoxLayout(conn_box)
-
-        self._lbl_rp_status = QLabel("Disconnected")
-        conn_lay.addWidget(self._lbl_rp_status)
-
-        self._btn_rp_connect = QPushButton("Auto-Connect")
-        conn_lay.addWidget(self._btn_rp_connect)
-
-        self._btn_rp_disconnect = QPushButton("Disconnect")
-        self._btn_rp_disconnect.setEnabled(False)
-        conn_lay.addWidget(self._btn_rp_disconnect)
-
-        conn_lay.addStretch()
-        layout.addWidget(conn_box)
+        # Connection status (read-only — managed by main window)
+        self._lbl_rp_status = QLabel("Not connected")
+        self._lbl_rp_status.setStyleSheet("color: #aaaaaa;")
+        layout.addWidget(self._lbl_rp_status)
 
         # Sub-tabs for different control areas
         sub_tabs = QTabWidget()
@@ -241,36 +232,34 @@ class SystemControlTab(QWidget):
         layout.addStretch()
         return w
 
-    def _connect_signals(self):
-        self._btn_rp_connect.clicked.connect(self._rp_connect)
-        self._btn_rp_disconnect.clicked.connect(self._rp_disconnect)
+    # ---- Visibility-driven polling ----
 
-    def _rp_connect(self):
-        port = RP2040Link.auto_detect_port()
-        if not port:
-            self._lbl_rp_status.setText("No RP2040 found")
-            return
-
-        if self._rp.connect(port):
-            self._lbl_rp_status.setText(f"Connected: {port}")
-            self._btn_rp_connect.setEnabled(False)
-            self._btn_rp_disconnect.setEnabled(True)
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._rp.is_connected:
+            self._lbl_rp_status.setText(f"Connected: {self._rp.port_name}")
+            self._lbl_rp_status.setStyleSheet("color: #44ff44;")
             self._poll_timer.start(500)
             self._load_config_values()
         else:
-            self._lbl_rp_status.setText("Connection failed")
+            self._lbl_rp_status.setText("Not connected")
+            self._lbl_rp_status.setStyleSheet("color: #aaaaaa;")
 
-    def _rp_disconnect(self):
+    def hideEvent(self, event):
         self._poll_timer.stop()
-        self._rp.disconnect()
-        self._lbl_rp_status.setText("Disconnected")
-        self._btn_rp_connect.setEnabled(True)
-        self._btn_rp_disconnect.setEnabled(False)
+        super().hideEvent(event)
+
+    # ---- Status polling ----
 
     def _poll_status(self):
         if not self._rp.is_connected:
             self._poll_timer.stop()
+            self._lbl_rp_status.setText("Not connected")
+            self._lbl_rp_status.setStyleSheet("color: #aaaaaa;")
             return
+
+        self._lbl_rp_status.setText(f"Connected: {self._rp.port_name}")
+        self._lbl_rp_status.setStyleSheet("color: #44ff44;")
 
         try:
             status = self._rp.get_status()

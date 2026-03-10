@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ccd_inspector.comm.serial_link import SerialLink
+from ccd_inspector.comm.ccd_link import CcdLink
 from ccd_inspector.processing.edge_detect import EdgeDetector
 from ccd_inspector.processing.part_classifier import PartClassifier
 from ccd_inspector.gui.widgets.waveform_widget import WaveformWidget
@@ -30,9 +30,9 @@ from ccd_inspector.gui.widgets.waveform_widget import WaveformWidget
 class EdgeDetectionTab(QWidget):
     """Interactive edge detection parameter tuning with live results."""
 
-    def __init__(self, serial_link: SerialLink, parent=None):
+    def __init__(self, link: CcdLink, parent=None):
         super().__init__(parent)
-        self._link = serial_link
+        self._link = link
         self._last_pixels: np.ndarray | None = None
         self._detector = EdgeDetector()
         self._classifier = PartClassifier()
